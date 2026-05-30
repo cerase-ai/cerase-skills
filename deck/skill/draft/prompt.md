@@ -1,0 +1,175 @@
+# `/deck draft` — Presentation Writer
+
+## What this subcommand does
+
+Read `presentation-brief.md` from the **current working directory** (CWD), fill any remaining content gaps, propose a narrative arc, map each beat to a slide pattern, then write a single artifact — `presentation.md` — to CWD. The output is md2-compliant markdown ready for `/deck render`.
+
+## Inputs
+
+- `presentation-brief.md` in CWD (produced by `/deck brief`).
+- Optional follow-up answers from the user during gap-filling.
+
+If `presentation-brief.md` is missing, stop and offer the user two paths:
+1. Run `/deck brief` first.
+2. Paste the brief content inline so we can proceed.
+
+Never invent the brief silently.
+
+## Output
+
+A single file in CWD: `presentation.md`. If a file with the same name already exists, ask the user whether to overwrite, append, or write to a different filename. Never silently overwrite.
+
+## Language
+
+Language behavior is governed by the router (`SKILL.md`). Briefly: chat in the user's language, the artifact defaults to English unless the brief specified otherwise (the `## Brand → Artifact language` field of the brief is the source of truth).
+
+## Knowledge files
+
+This subcommand has four reference files in the same directory. **Load them lazily, on demand, only when relevant** — do not pre-load all of them up front.
+
+| File                          | When to load                                                          |
+|-------------------------------|----------------------------------------------------------------------|
+| `slide-patterns.md`           | When choosing a slide pattern for a beat or writing a slide block.    |
+| `copy-rules.md`               | When writing or revising slide copy (headlines, bullets, captions).    |
+| `md2-cheatsheet.md`           | When writing md2 syntax (frontmatter, charts, columns, etc.).          |
+| `print-constraints.md`        | When sizing content per slide (chart slides, pie sizing, table limits).|
+
+These files are the source of truth for their respective domains. Don't paraphrase; quote or apply their rules directly.
+
+## Procedure
+
+### Step 1 — Read the brief
+
+Read `presentation-brief.md`. Map each section to your working memory:
+- Audience → drives tone, density, what to leave implicit.
+- Objective → drives the narrative arc (next step).
+- Format → drives slide density (presented vs leave-behind).
+- Length budget → drives slide count.
+- Brand → drives palette and language.
+- Hard content → drives what *must* appear in the deck.
+- Tone → drives word choice and sentence shape.
+
+### Step 2 — Fill content gaps
+
+Compare the brief against what the deck needs. Common gaps:
+- Numbers mentioned in the brief but no source provided.
+- Claims with no supporting data.
+- An objective of "decide" or "approve" without a stated ask.
+- Visuals referenced ("we have a chart of X") but no path/data given.
+
+Ask **targeted** follow-up questions only for the gaps. Don't re-run the full interview. Two or three pointed questions are enough; if the user says "make it up", capture that decision and proceed.
+
+### Step 3 — Propose a narrative arc
+
+Choose a framework based on the objective. Present the arc to the user as a **1-line outline** (one bullet per slide, headline-as-punchline) before writing any markdown. Wait for the user's go-ahead or revisions.
+
+| Objective class    | First-choice framework                                          |
+|--------------------|----------------------------------------------------------------|
+| Decide / Approve   | **Pyramid** (Minto): conclusion first, then 3 supporting groups |
+| Persuade           | **SCQA** (Situation → Complication → Question → Answer)         |
+| Update / Inform    | **3-act**: where we were → what changed → what's next           |
+| Teach              | **Problem → Solution → Application**                            |
+
+The narrative is a sequence of beats. A "beat" is one chunk of message; it usually maps to one slide, occasionally two.
+
+### Step 4 — Map beats to slide patterns
+
+For each beat in the outline, choose a slide pattern from `slide-patterns.md`. Use the *Quick selection guide* table at the end of that file as a starter.
+
+Sanity checks:
+- Cover (pattern 1) is always slide 1.
+- Closing/CTA (pattern 13) is always the last slide.
+- Section dividers (pattern 2) appear at most 2-3 times, only between major narrative blocks.
+- Hero stats (pattern 3) appear at most 1-2 times, on the strongest numbers.
+
+If two adjacent beats both want the same pattern, consider whether they should merge.
+
+### Step 5 — Write `presentation.md`
+
+Apply the rules from the knowledge files as you write:
+
+- **Frontmatter**: the `+++` TOML block must be the very first thing in the file (no HTML comments, no blank lines before it — md2 only parses frontmatter when it starts on line 1). Include `title`, `palette` (from brief), `lang` (from brief), and optional `dark`. See `md2-cheatsheet.md` for fields.
+
+- **Orientation comments**: at the **end of the file**, after the last slide, emit two HTML comments preserving the brief's choice:
+
+  ```markdown
+  <!-- deck-orientation: landscape -->
+  <!-- deck-paper: A4 -->
+  ```
+
+  These are read by `render.sh` (which greps the source `.md` regardless of position) to inject the right `@page` CSS at PDF time. Placing them at the bottom keeps them out of the cover slide's paragraph (which md2 picks up for the meta description) and out of md2's frontmatter parser. Use the values from the brief's `## Format → Orientation` and `## Format → Paper size` fields. If the brief is silent, default to `landscape` and `A4`.
+- **Cover**: pattern 1, with the title as a punchline (apply `copy-rules.md` rule 10).
+- **Slide titles**: every `## H2` is a takeaway (`copy-rules.md` rule 1). Test each: could it appear unchanged on a different deck? If yes, rewrite.
+- **Bullet density**: max 6 bullets, max ~6 words/bullet for presented decks; up to 10-12 words for leave-behind (`copy-rules.md` rule 6).
+- **Numbers and sources**: every load-bearing number cites its source inline (`copy-rules.md` rule 8).
+- **Chart slides**: at most 1-2 short lines of description alongside the chart. No second chart, no table on the same slide. Pie charts standalone (`print-constraints.md` rules 1-3).
+- **Bar/column ratios**: keep largest:smallest ≤ 10x or split the chart (`print-constraints.md` rule 4).
+- **No empty slides**: ≥ 1/3 of the page filled. Section dividers exempt (`print-constraints.md` rule 6).
+- **Always H2**: never let a slide fall back to "Slide N" in the sidebar (`print-constraints.md` rule 7).
+
+Do not pre-load all knowledge files; load each one when you reach the corresponding writing task.
+
+### Step 6 — Self-check before declaring done
+
+Before reporting completion, run through this checklist:
+
+- [ ] Cover has a punchline title and a 1-line subtitle.
+- [ ] Every slide has a `## H2` that states a takeaway.
+- [ ] No slide has more than 6 bullets.
+- [ ] Every chart slide has at most 2 short lines of description alongside.
+- [ ] No bar/column chart has a value ratio > 10x.
+- [ ] Pie chart slides are minimal (H2 + 1 line, no other content).
+- [ ] Every load-bearing number has an inline source.
+- [ ] No banned filler phrases (`copy-rules.md` rule 7).
+- [ ] Closing slide states an ask, not just "Thank you".
+- [ ] The deck ends with the file written to CWD as `presentation.md`.
+
+If any check fails, fix it before reporting completion.
+
+### Step 7 — Self-validation
+
+Before declaring the deck done, run `md2` once to confirm the file parses cleanly. The agent (you) runs this via Bash:
+
+```bash
+md2 presentation.md
+```
+
+What to do based on the outcome:
+
+1. **md2 succeeds** → continue to Step 8.
+2. **md2 errors out** → read the error message carefully. Most failures fall into the Gotchas list below. Fix the offending block and re-run. **Maximum 2 retries.** Don't keep guessing.
+3. **md2 still fails after 2 retries** → stop and surface the error verbatim to the user. Ask which block to drop or whether to switch approach. Do not guess silently.
+
+Sanity check after success: count the `## H2` slide titles in `presentation.md` and compare to the slide count in your outline (Step 3). If they don't match, a slide separator (`---`) is missing or doesn't have blank lines above and below — go back and fix it.
+
+After `/deck render` produces a PDF (Step 8 onward), run a second sanity check on page count:
+
+```bash
+pdfinfo presentation.pdf | grep Pages
+```
+
+Expected page count is `N H2 slides + 1 cover`. If the PDF has more pages than that, at least one slide overflowed onto a second page — almost always a column slide that combined `:::columns` with too much surrounding content (intro paragraph + closing blockquote). See `print-constraints.md` rule 8: lighten the offending slide (compress intro to one line, drop closing blockquote, cut bullet count to ≤ 4 per column) and re-render.
+
+### Step 8 — Hand off
+
+Report to the user:
+- File written: `<absolute path>/presentation.md`.
+- Slide count.
+- Suggested next step: `/deck render` to produce HTML and PDF.
+
+---
+
+## Gotchas (md2 syntax pitfalls)
+
+The most frequent failure modes when md2 rejects a file. Skim before writing; consult when md2 errors.
+
+- **Frontmatter delimiter**: md2 uses `+++` (TOML), NOT `---` (YAML). The `---` in md2 is the **slide separator**, not the frontmatter fence. Mixing them silently corrupts both: md2 thinks the YAML body is the first slide, and the real first slide goes missing.
+- **Slide separators (`---`) need a blank line above and below.** Without them, md2 keeps appending to the current slide and your separator becomes literal text. This is the single most common source of "I wrote 12 slides but only 7 rendered" bugs.
+- **`:::chart` and `:::columns` blocks need a blank line above and below.** The closing `:::` goes on its own line, also with a blank line after.
+- **Tables inside `:::chart` must have a header row, a separator row (`|---|---|`), and at least 2 data rows.** Single-row charts render as empty boxes.
+- **Pie chart values must be positive integers.** Zero or negative slices crash the renderer or produce invisible slices.
+- **All table rows must have the same number of `|` columns as the header.** A mismatched row silently turns the whole block into plain text.
+- **Don't nest `:::chart` inside `:::columns`.** The directive parser does not handle nesting reliably; the output is unpredictable. If you need a chart and other content side-by-side, put the chart on its own slide instead (per `print-constraints.md`).
+- **Bar / column chart value ratios > 10x clip the smallest labels.** Already in `print-constraints.md` rule 4 — applies here at write time, not just at render time.
+- **HTML comments before `+++` break frontmatter parsing.** md2 only parses the TOML frontmatter when `+++` is on line 1. Anything above it — including the `<!-- deck-orientation -->` comments — causes md2 to silently fall back to default `<title>Presentation</title>` and to render the `+++` block as visible body text on the cover. Always put `+++` first; put the orientation/paper comments at the **end** of the file. HTML comments inside the body are passed through and may end up inside meta tags or as visible text near the cover paragraph; keep them at the bottom of the file.
+- **Column slide overflow on A4 landscape.** A slide that combines `:::columns` with an H2 + multi-line intro + closing blockquote can exceed the printable area. Because md2's print CSS sets `break-inside: avoid` on `.md2-columns`, the columns block gets pushed to the next page entirely, leaving the H2 + intro orphan on the previous page. Symptom: the rendered PDF has more pages than slides. Fix during writing: keep column slides light — short intro (one line), no closing blockquote, ≤ 4 short bullets per column. See `print-constraints.md` rule 8. The page-count check at Step 7 catches this after rendering.
